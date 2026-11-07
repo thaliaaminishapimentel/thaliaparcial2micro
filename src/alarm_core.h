@@ -5,17 +5,22 @@
  * Proyecto: Monitor de senal analogica
  * Placa: FRDM-MCXA156
  *
- * Conversion ADC y procesamiento de comandos UART.
+ * Conversion ADC, comandos UART
+ * y control de estados RUN y PAUSE.
  */
 
 #ifndef ALARM_CORE_H
 #define ALARM_CORE_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
 
-/* Conversion de ADC de 16 bits a porcentaje */
+/* ========================================
+ * CONVERSION ADC A PORCENTAJE
+ * ======================================== */
+
 static inline uint8_t alarm_pct16(uint16_t adc)
 {
     return (uint8_t)(
@@ -23,7 +28,10 @@ static inline uint8_t alarm_pct16(uint16_t adc)
     );
 }
 
-/* Tipos de comandos admitidos */
+/* ========================================
+ * COMANDOS UART
+ * ======================================== */
+
 typedef enum
 {
     ALARM_CMD_IGNORE,
@@ -35,7 +43,7 @@ typedef enum
 
 } alarm_cmd_t;
 
-/* Analizar los comandos recibidos por UART */
+/* Analizar comandos recibidos por UART */
 static inline alarm_cmd_t alarm_parse(
     const char *line,
     uint8_t *new_thr)
@@ -49,25 +57,25 @@ static inline alarm_cmd_t alarm_parse(
         return ALARM_CMD_IGNORE;
     }
 
-    /* Solicitar estado del sistema */
+    /* Comando STATUS */
     if (strcmp(line, "STATUS") == 0)
     {
         return ALARM_CMD_STATUS;
     }
 
-    /* Iniciar funcionamiento */
+    /* Comando START */
     if (strcmp(line, "START") == 0)
     {
         return ALARM_CMD_START;
     }
 
-    /* Pausar funcionamiento */
+    /* Comando STOP */
     if (strcmp(line, "STOP") == 0)
     {
         return ALARM_CMD_STOP;
     }
 
-    /* Verificar formato del comando THR */
+    /* Verificar formato THR */
     if (strncmp(line, "THR ", 4) != 0)
     {
         return ALARM_CMD_ERR;
@@ -79,10 +87,9 @@ static inline alarm_cmd_t alarm_parse(
         return ALARM_CMD_ERR;
     }
 
-    /* Convertir los caracteres numericos */
+    /* Convertir caracteres numericos */
     for (i = 4; line[i] != '\0'; ++i)
     {
-        /* Rechazar caracteres no numericos */
         if (line[i] < '0' || line[i] > '9')
         {
             return ALARM_CMD_ERR;
@@ -91,7 +98,6 @@ static inline alarm_cmd_t alarm_parse(
         value = value * 10U +
                 (unsigned)(line[i] - '0');
 
-        /* Umbral maximo permitido */
         if (value > 95U)
         {
             return ALARM_CMD_ERR;
@@ -104,10 +110,121 @@ static inline alarm_cmd_t alarm_parse(
         return ALARM_CMD_ERR;
     }
 
-    /* Guardar el nuevo umbral */
+    /* Guardar nuevo umbral */
     *new_thr = (uint8_t)value;
 
     return ALARM_CMD_THR;
+}
+
+/* ========================================
+ * ESTRUCTURA PRINCIPAL DEL SISTEMA
+ * ======================================== */
+
+typedef struct
+{
+    uint8_t threshold;
+    uint8_t percent;
+    uint16_t adc;
+
+    bool has_sample;
+    bool running;
+    bool alarm;
+    bool reset_decision;
+
+} alarm_core_t;
+
+/* ========================================
+ * INICIALIZACION DEL SISTEMA
+ * ======================================== */
+
+static inline void alarm_init(alarm_core_t *c)
+{
+    /* Umbral inicial de 70 por ciento */
+    c->threshold = 70U;
+
+    /* Valor inicial del ADC */
+    c->percent = 0U;
+    c->adc = 0U;
+
+    /* Todavia no existe una muestra */
+    c->has_sample = false;
+
+    /* Iniciar en modo RUN */
+    c->running = true;
+
+    /* Alarma inicialmente apagada */
+    c->alarm = false;
+
+    /* Pendiente primera evaluacion */
+    c->reset_decision = true;
+}
+
+/* ========================================
+ * REEVALUACION DE LA ALARMA
+ * ======================================== */
+
+static inline void alarm_restart_decision(
+    alarm_core_t *c)
+{
+    /* En PAUSE la alarma debe apagarse */
+    if (!c->running)
+    {
+        c->alarm = false;
+        return;
+    }
+
+    /* Evaluar si existe una lectura ADC */
+    if (c->has_sample)
+    {
+        c->alarm =
+            (c->percent >= c->threshold);
+
+        c->reset_decision = false;
+    }
+    else
+    {
+        c->alarm = false;
+        c->reset_decision = true;
+    }
+}
+
+/* ========================================
+ * CONTROL DE ESTADOS RUN Y PAUSE
+ * ======================================== */
+
+/* Activar modo RUN */
+static inline void alarm_start(alarm_core_t *c)
+{
+    if (!c->running)
+    {
+        c->running = true;
+
+        /* Reevaluar estado de la alarma */
+        alarm_restart_decision(c);
+    }
+}
+
+/* Activar modo PAUSE */
+static inline void alarm_stop(alarm_core_t *c)
+{
+    /* Detener funcionamiento de alarma */
+    c->running = false;
+
+    /* Apagar la alarma */
+    c->alarm = false;
+}
+
+/* Alternar entre RUN y PAUSE */
+static inline void alarm_toggle(alarm_core_t *c)
+{
+    if (c->running)
+    {
+        alarm_stop(c);
+    }
+    else
+    {
+        alarm_start(c);
+    }
 }
 
 #endif /* ALARM_CORE_H */
