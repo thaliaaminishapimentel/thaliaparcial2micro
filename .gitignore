@@ -1,0 +1,26 @@
+
+# Archivos generados por MCUXpresso y CMake
+debug/
+release/
+build/
+out/
+
+# Archivos generados por la extension MCUXpresso
+mcux_include.json
+compile_commands.json
+
+# Archivos temporales
+*.elf
+*.axf
+*.map
+*.bin
+*.hex
+*.o
+*.obj
+*.d
+*.log
+
+# Carpetas temporales de Python
+__pycache__/
+.vscode/
+CMakePresets.json
