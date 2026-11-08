@@ -6,7 +6,8 @@
  * Placa: FRDM-MCXA156
  *
  * Conversion ADC, comandos UART,
- * estados RUN y PAUSE e histeresis.
+ * estados RUN/PAUSE, histeresis
+ * y antirrebote del pulsador SW2.
  */
 
 #ifndef ALARM_CORE_H
@@ -75,13 +76,12 @@ static inline alarm_cmd_t alarm_parse(
         return ALARM_CMD_STOP;
     }
 
-    /* Verificar formato del comando THR */
+    /* Verificar formato THR */
     if (strncmp(line, "THR ", 4) != 0)
     {
         return ALARM_CMD_ERR;
     }
 
-    /* Verificar que exista un valor */
     if (line[4] == '\0')
     {
         return ALARM_CMD_ERR;
@@ -104,13 +104,11 @@ static inline alarm_cmd_t alarm_parse(
         }
     }
 
-    /* Umbral minimo permitido */
     if (value < 10U)
     {
         return ALARM_CMD_ERR;
     }
 
-    /* Guardar el nuevo umbral */
     *new_thr = (uint8_t)value;
 
     return ALARM_CMD_THR;
@@ -139,23 +137,13 @@ typedef struct
 
 static inline void alarm_init(alarm_core_t *c)
 {
-    /* Umbral inicial de 70 por ciento */
     c->threshold = 70U;
-
-    /* Valores iniciales del ADC */
     c->percent = 0U;
     c->adc = 0U;
 
-    /* Todavia no existe una muestra ADC */
     c->has_sample = false;
-
-    /* Iniciar en modo RUN */
     c->running = true;
-
-    /* Alarma inicialmente apagada */
     c->alarm = false;
-
-    /* Primera evaluacion pendiente */
     c->reset_decision = true;
 }
 
@@ -166,14 +154,12 @@ static inline void alarm_init(alarm_core_t *c)
 static inline void alarm_restart_decision(
     alarm_core_t *c)
 {
-    /* La alarma debe apagarse en PAUSE */
     if (!c->running)
     {
         c->alarm = false;
         return;
     }
 
-    /* Verificar si existe una muestra ADC */
     if (c->has_sample)
     {
         c->alarm =
@@ -198,8 +184,6 @@ static inline void alarm_start(alarm_core_t *c)
     if (!c->running)
     {
         c->running = true;
-
-        /* Reevaluar estado de la alarma */
         alarm_restart_decision(c);
     }
 }
@@ -208,8 +192,6 @@ static inline void alarm_start(alarm_core_t *c)
 static inline void alarm_stop(alarm_core_t *c)
 {
     c->running = false;
-
-    /* Apagar alarma */
     c->alarm = false;
 }
 
@@ -227,18 +209,14 @@ static inline void alarm_toggle(alarm_core_t *c)
 }
 
 /* ========================================
- * CAMBIO DEL UMBRAL DE ALARMA
+ * CAMBIO DEL UMBRAL
  * ======================================== */
 
-/* Actualizar umbral y reevaluar alarma */
 static inline void alarm_set_thr(
     alarm_core_t *c,
     uint8_t thr)
 {
-    /* El analizador UART valida 10 a 95 */
     c->threshold = thr;
-
-    /* Evaluar inmediatamente la alarma */
     alarm_restart_decision(c);
 }
 
@@ -247,51 +225,31 @@ static inline void alarm_set_thr(
  * ======================================== */
 
 /*
- * Reglas de la histeresis:
- *
- * 1. Enciende cuando PCT >= THR.
- *
- * 2. Apaga cuando PCT < (THR - 5).
- *
- * 3. Entre esos limites conserva
- *    el estado anterior de la alarma.
- *
- * 4. En modo PAUSE la alarma
- *    permanece apagada.
+ * Encender: PCT >= THR
+ * Apagar:   PCT < (THR - 5)
+ * Retener:  dentro de la banda
  */
 
 static inline void alarm_sample(
     alarm_core_t *c,
     uint16_t adc)
 {
-    /* Guardar nueva lectura ADC */
     c->adc = adc;
-
-    /* Convertir lectura a porcentaje */
     c->percent = alarm_pct16(adc);
-
-    /* Confirmar existencia de muestra */
     c->has_sample = true;
 
-    /* En PAUSE, apagar la alarma */
     if (!c->running)
     {
         c->alarm = false;
     }
-
-    /* Primera muestra o reinicio */
     else if (c->reset_decision)
     {
         alarm_restart_decision(c);
     }
-
-    /* Encender si alcanza el umbral */
     else if (c->percent >= c->threshold)
     {
         c->alarm = true;
     }
-
-    /* Apagar debajo de la histeresis */
     else if (
         c->percent <
         (uint8_t)(c->threshold - 5U))
@@ -299,11 +257,83 @@ static inline void alarm_sample(
         c->alarm = false;
     }
 
-    /*
-     * Si el porcentaje esta dentro de
-     * la banda de histeresis, no se
-     * modifica el estado de la alarma.
-     */
+    /* En la banda conserva el estado */
+}
+
+/* ========================================
+ * ANTIRREBOTE DEL PULSADOR SW2
+ * ======================================== */
+
+/*
+ * El debounce permite detectar una
+ * pulsacion estable durante 30 ms.
+ *
+ * Cada pulsacion genera una unica accion.
+ * Mantener presionado el boton no genera
+ * nuevas pulsaciones.
+ */
+
+#define ALARM_DEBOUNCE_MS 30U
+
+/* Estructura del pulsador */
+typedef struct
+{
+    bool raw;
+    bool stable;
+    uint32_t changed_at;
+
+} alarm_debounce_t;
+
+/* Inicializar el sistema de antirrebote */
+static inline void alarm_debounce_init(
+    alarm_debounce_t *d,
+    bool initial_raw)
+{
+    d->raw = initial_raw;
+    d->stable = initial_raw;
+    d->changed_at = 0U;
+}
+
+/*
+ * Procesar el estado del pulsador.
+ *
+ * pressed:
+ * true  = boton presionado
+ * false = boton liberado
+ *
+ * now:
+ * tiempo actual en milisegundos.
+ *
+ * Devuelve true una sola vez cuando
+ * se confirma una nueva pulsacion.
+ */
+
+static inline bool alarm_debounce_pressed(
+    alarm_debounce_t *d,
+    bool pressed,
+    uint32_t now)
+{
+    /* Detectar cambio de estado */
+    if (pressed != d->raw)
+    {
+        d->raw = pressed;
+        d->changed_at = now;
+    }
+
+    /* Verificar estabilidad de 30 ms */
+    if (
+        (d->raw != d->stable) &&
+        ((uint32_t)(now - d->changed_at)
+            >= ALARM_DEBOUNCE_MS))
+    {
+        d->stable = d->raw;
+
+        /* Solo generar evento al presionar */
+        return d->stable;
+    }
+
+    return false;
 }
 
 #endif /* ALARM_CORE_H */
+
