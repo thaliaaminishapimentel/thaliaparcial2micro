@@ -1,253 +1,246 @@
-# Monitor analógico con alarma — FRDM-MCXA156
+# Monitor analógico con alarma configurable — FRDM-MCXA156
 
-**Asignatura:** Microcontroladores — ITLA  
+**Institución:** Instituto Tecnológico de Las Américas (ITLA)  
+**Asignatura:** Microcontroladores  
 **Estudiante:** Thalía Aminisha Pimentel  
 **Matrícula:** 2025-0531  
-**Lenguaje de programación:** C  
 **Repositorio:** `thaliaparcial2micro`  
+**Lenguaje:** C  
 **Placa:** NXP FRDM-MCXA156  
-**Microcontrolador:** NXP MCXA156VLL — núcleo Arm Cortex-M33
+**Microcontrolador:** NXP MCXA156VLL (Arm Cortex-M33)  
+**Pruebas de funcionamiento:** 8 de noviembre de 2026
 
-## 1. Objetivo del proyecto
+## 1. Objetivo
 
-Desarrollar un monitor de señal analógica que lea la posición de un potenciómetro mediante el convertidor analógico-digital (ADC), convierta el resultado a porcentaje y controle un LED de alarma según un umbral configurable.
+Diseñar, implementar y comprobar un monitor de señal analógica basado en la **FRDM-MCXA156** que lea un potenciómetro, convierta la lectura a porcentaje y controle una alarma mediante un LED blanco. El sistema incluye **ADC, GPIO, CTIMER1, UART, modos RUN/PAUSE, pulsador SW2, histéresis y telemetría periódica**.
 
-La aplicación combina **ADC, GPIO, TIMER y UART**. Tiene estados **RUN** y **PAUSE**, un pulsador **SW2**, telemetría por puerto serie y una banda de histéresis para evitar cambios repetidos de la alarma cerca del umbral.
+**Resultado:** el proyecto se compiló, se grabó y se ejecutó físicamente en la placa. En las pruebas se observaron lecturas del ADC, respuesta de ambos LED, estados RUN/PAUSE, comandos UART, histéresis y temporización periódica. Las pruebas realizadas se documentan en [Resultados y evidencias](evidencias/RESULTADOS_P01_P10.md).
 
 ## 2. Herramientas y versiones
 
-| Herramienta | Uso | Versión / estado |
+| Herramienta | Función | Versión identificada en la práctica |
 |---|---|---|
-| Visual Studio Code | Edición y desarrollo en C | Versión exacta por confirmar en el equipo |
-| Extensión MCUXpresso for VS Code (NXP) | Importación, compilación y depuración | Versión exacta por confirmar |
-| MCUXpresso SDK para FRDM-MCXA156 | Drivers y soporte de la placa | **26.9.0**, registrada en el proyecto original; confirmar para este repositorio |
-| Arm GNU Toolchain | Compilador cruzado para Arm | **14.2.1**, registrada en el entorno anterior; confirmar instalación actual |
-| LinkServer | Programación y depuración mediante MCU-Link | **26.6.137**, registrada en las pruebas previas; confirmar versión actual |
-| GitHub Desktop | Control de versiones | Versión exacta por confirmar |
-| Windows | Sistema anfitrión | Versión exacta por confirmar |
+| Visual Studio Code | Edición y compilación del proyecto | Utilizado; número de versión no registrado en las capturas |
+| Extensión MCUXpresso for VS Code | Integración del SDK, Build, Flash y depuración | Utilizada; número de versión no registrado en las capturas |
+| **MCUXpresso SDK** | Controladores de FRDM-MCXA156 | **26.9.0** |
+| **Arm GNU Toolchain** | Compilador cruzado para Arm | **14.2.1** |
+| **LinkServer** | Programación y depuración por MCU-Link | **26.6.137** |
+| GitHub Desktop | Historial de cambios y publicación del código | Utilizado; número de versión no registrado |
+| Windows | Sistema operativo del equipo de trabajo | Utilizado; edición no registrada |
 
-> Las versiones indicadas proceden del entorno donde se probó el firmware original. Antes de entregar la práctica, comprobar y actualizar las versiones realmente utilizadas para compilar **este repositorio**. No se deben inventar números de versión.
+Las versiones numéricas indicadas del SDK, compilador y LinkServer fueron visibles en el entorno utilizado al compilar este repositorio. No se asignan versiones sin evidencia.
 
-## 3. Mapa de pines y conexiones
+## 3. Materiales y mapa de pines
 
-| Elemento | Conector / pin de la placa | Pin del MCU o periférico | Función |
+El montaje utiliza la placa FRDM-MCXA156, un potenciómetro, dos LED externos (rojo y blanco), dos resistencias limitadoras de **330 Ω**, cables y conexión USB-C mediante MCU-Link. La consigna de materiales solicita potenciómetro de **10 kΩ**; la lectura depende de la proporción de voltaje en el cursor cuando se conecta entre 3.3 V y GND.
+
+| Elemento | Conexión física en la placa | Pin / módulo del MCU | Función |
 |---|---|---|---|
-| Potenciómetro — cursor (central) | **A0 / J4-2** | **P1_10 / ADC1_A8** | Entrada analógica de 0 a 3.3 V |
-| Potenciómetro — extremo de alimentación | **J3-8** | **LDO_3V3** | Alimentación de 3.3 V |
-| Potenciómetro — extremo de tierra | **J3-12** o **J3-14** | **GND** | Referencia común |
-| LED rojo de actividad | **D2 / J1-6** | **P3_1 / GPIO3 pin 1** | Salida digital, resistencia de 330 Ω |
-| LED blanco de alarma | **D4 / J1-10** | **P3_31 / GPIO3 pin 31** | Salida digital, resistencia de 330 Ω |
-| Pulsador integrado SW2 | En la placa | **P1_7 / GPIO1 pin 7** | Entrada digital activa en nivel bajo |
-| UART con PC | **USB-C J21, MCU-Link VCOM** | **LPUART0** (pines P0_2 y P0_3) | Comunicación serial virtual |
+| Potenciómetro, terminal central | **A0 / J4-2** | **P1_10 / ADC1_A8** | Entrada ADC |
+| Potenciómetro, extremo positivo | **J3-8 / LDO_3V3** | 3.3 V | Alimentación |
+| Potenciómetro, extremo negativo | **J3-12 o J3-14** | GND | Tierra común |
+| LED rojo externo | **D2 / J1-6** + 330 Ω | **P3_1 / GPIO3[1]** | Indicador de actividad |
+| LED blanco externo | **D4 / J1-10** + 330 Ω | **P3_31 / GPIO3[31]** | Indicador de alarma |
+| SW2 integrado | Botón WAKE UP | **P1_7 / GPIO1[7]** | RUN/PAUSE; activo en bajo |
+| Conexión serial al PC | USB-C **J21 (MCU-Link)** | **LPUART0**, P0_2/P0_3 | Puerto virtual COM |
 
-**Importante:** D2 y D4 en esta tabla son **posiciones del conector Arduino**, no los diodos LED integrados de la placa. Los LED rojo y blanco son componentes externos.
+**D2 y D4 son terminales del conector Arduino**, no los LED integrados de la placa.
 
-### 3.1 Esquema de conexiones (vista funcional)
+### 3.1 Esquema funcional de conexiones
 
 ```text
-                    FRDM-MCXA156
-               +-----------------------+
-J3-8   3.3 V --+---- extremo 1         |
-               |      Potenciómetro    |
-J4-2   A0   <--+---- cursor central    |  ADC1_A8 / P1_10
-J3-12  GND  ---+---- extremo 2         |
-               |                       |
-J1-6   D2   ---+--[330 Ω]-->|-- GND    |  LED rojo (actividad)
-               |                       |
-J1-10  D4   ---+--[330 Ω]-->|-- GND    |  LED blanco (alarma)
-               |                       |
-               | SW2 integrado (P1_7)  |  RUN / PAUSE
-               |                       |
-PC <--- USB ---+ J21 MCU-Link / VCOM   |  UART 115200, 8N1
-               +-----------------------+
+              POTENCIÓMETRO
+3.3 V (J3-8) -----[ extremo A ]
+                         |
+                         o---- cursor central ---- A0 (J4-2 / P1_10)
+                         |
+GND (J3-12) ------[ extremo B ]
+
+D2 (J1-6 / P3_1) ---[330 Ω]---|>|--- GND    LED ROJO
+D4 (J1-10 / P3_31)--[330 Ω]---|>|--- GND    LED BLANCO
+
+SW2 integrado (P1_7, activo en bajo) -------- RUN / PAUSE
+PC --- USB-C --- J21 (MCU-Link VCOM) ------- UART LPUART0
 ```
 
-- Los dos LED deben llevar **una resistencia limitadora individual**.
-- Usar un potenciómetro de **10 kΩ** para ajustarse al material exigido. Las pruebas anteriores se realizaron con uno de **5 kΩ**.
-- **No aplicar 5 V** a la entrada A0. Desconectar la alimentación antes de cambiar las conexiones.
+**Seguridad:** no aplicar 5 V a A0. Compartir GND entre las conexiones, utilizar una resistencia individual por LED y desconectar la alimentación antes de modificar el montaje.
 
-## 4. ADC: referencia, resolución y conversión
+## 4. ADC: VREF, resolución y porcentaje
 
-| Parámetro | Configuración |
+| Parámetro | Configuración utilizada |
 |---|---|
-| Módulo | **LPADC1 (ADC1)** |
-| Entrada | **Canal A8**, pin **P1_10 / A0** |
-| Tipo de lectura | Simple (single-ended) |
-| Reloj funcional de ADC | **FRO12M / 1 = 12 MHz** |
-| Referencia positiva | **VREFH = VDDA_MCU**, aproximadamente **3.3 V** en la placa |
+| Periférico | **LPADC1 / ADC1** |
+| Entrada | **ADC1_A8**, P1_10, A0 |
+| Reloj ADC | **FRO12M / 1 = 12 MHz** |
+| Referencia positiva | **VDDA / VREFH**, nominalmente **3.3 V** |
 | Referencia negativa | **GND / VREFL** |
-| Resolución seleccionada en firmware | **Modo de alta resolución de 16 bits** (`kLPADC_ConversionResolutionHigh`) |
-| Rango usado por el programa | **0 a 65535** (`uint16_t`) |
-| Intervalo de solicitud de lectura | **100 ms** |
+| Modo seleccionado en C | `kLPADC_ConversionResolutionHigh` |
+| Rango numérico de lectura | **0 a 65535** (resultado de 16 bits) |
+| Período de solicitud | **100 ms** |
 
-**Nota sobre resolución:** NXP describe el bloque como un ADC SAR de **12 bits**, que admite un **modo de conversión de alta resolución de 16 bits**. El firmware selecciona explícitamente ese modo; por eso interpreta resultados en el rango 0–65535. La cantidad de bits del resultado no garantiza por sí sola una precisión analógica efectiva equivalente.
+El firmware selecciona el **modo de alta resolución** del LPADC y maneja un resultado de **16 bits**. Esto describe el formato de conversión programado; no implica una precisión eléctrica efectiva de 16 bits garantizada.
 
-La referencia nominal es **3.3 V**, pero su valor real depende de la alimentación de la placa; debe medirse con multímetro si se requiere precisión instrumental.
-
-**Conversión del código ADC a porcentaje:**
+La conversión a porcentaje usa aritmética entera de 32 bits:
 
 ```text
 PCT = (ADC × 100 + 32767) / 65535
 ```
 
-Se usa aritmética de 32 bits y redondeo entero. Por ejemplo, una lectura próxima a la mitad del rango corresponde aproximadamente a **50 %**.
-
-**Tamaño nominal de un paso de código en modo de 16 bits**, suponiendo VREF = 3.3 V:
+Para VREF nominal = 3.3 V, el tamaño numérico ideal de un paso es:
 
 ```text
-3.3 V / 65535 ≈ 0.00005035 V ≈ 50.35 µV por código
+LSB ideal = 3.3 V / 65535 ≈ 0.00005035 V = 50.35 µV
 ```
 
-Este valor expresa el paso numérico ideal, **no** la precisión garantizada de la medición.
+En las pruebas se observaron **ADC=65535, PCT=100 %**, lecturas cercanas a cero con **PCT=0 %** y un punto medio de aproximadamente **50 %**. Los códigos pequeños cercanos a cero pueden aparecer como 0 % por el redondeo entero.
 
-## 5. TIMER: configuración y cálculo del período
+## 5. CTIMER1: configuración y cálculo
 
-Se utiliza **CTIMER1** para obtener una base de tiempo de **1 milisegundo (1 ms)** sin bloquear el programa principal.
+El temporizador **CTIMER1** genera la base de tiempo que utiliza la aplicación para programar sus tareas sin esperas bloqueantes.
 
-| Parámetro | Configuración |
+| Parámetro | Configuración en el código |
 |---|---|
-| Módulo | CTIMER1 |
-| Fuente de reloj | FRO_HF |
-| Divisor de reloj del módulo | 1 |
-| Preescalador | 0 (división efectiva por 1) |
-| Canal de comparación | MATCH0 |
-| Reinicio de contador por coincidencia | Habilitado |
-| Interrupción | Cada 1 ms, nominalmente |
+| Fuente de reloj | `kFRO_HF_to_CTIMER1` |
+| Divisor de reloj CTIMER1 | 1 |
+| Preescalador (`prescale`) | 0, divisor efectivo 1 |
+| Comparador | MATCH0 |
+| Reinicio del contador al coincidir | Habilitado |
+| Interrupción nominal | Cada **1 ms** |
 
-**Cálculo:**
-
-```text
-T = 1 ms = 0.001 s
-F_CTIMER = CLOCK_GetCTimerClkFreq(1U)
-Cuentas por interrupción = F_CTIMER × T
-Cuentas por interrupción = F_CTIMER / 1000
-```
-
-Si el reloj efectivo es **96 MHz**:
+El programa consulta `CLOCK_GetCTimerClkFreq(1U)` y calcula:
 
 ```text
-Cuentas = 96,000,000 / 1000 = 96,000
-MATCH0 = 96,000
-Período nominal = 96,000 / 96,000,000 = 0.001 s = 1 ms
+T_tick = 1 ms = 0.001 s
+MATCH0 = F_CTIMER / 1000
 ```
 
-El firmware obtiene **F_CTIMER en ejecución**, por lo que no depende de suponer siempre 96 MHz. El período real debe comprobarse mediante instrumentación si la rúbrica exige tolerancias.
+Ejemplo con un reloj efectivo de **96 MHz**:
 
-**Tareas programadas con este tick:**
+```text
+MATCH0 = 96,000,000 Hz / 1000 = 96,000 cuentas
+T_tick = 96,000 / 96,000,000 = 0.001 s = 1 ms
+```
 
-| Tarea | Intervalo |
+La frecuencia de ejemplo no está fijada arbitrariamente en el programa: el valor real se obtiene de la configuración del reloj.
+
+| Tarea | Intervalo programado |
 |---|---|
-| Solicitud de conversión ADC | 100 ms |
-| Cambio de estado del LED rojo | 500 ms |
-| Envío de telemetría UART | 1000 ms |
-| Antirrebote del SW2 | 30 ms de estabilidad |
+| Inicio de conversión ADC | 100 ms |
+| Alternancia del LED rojo | 500 ms |
+| Reporte UART | 1000 ms |
+| Antirrebote de SW2 | 30 ms de estabilidad |
 
-El LED rojo cambia de estado cada 500 ms, de modo que un ciclo completo encendido-apagado dura aproximadamente **1 s**.
+Durante la ejecución, el **LED rojo parpadeó** y las líneas de telemetría mostraron incrementos de **1000 ms** en el campo `t`. Los tiempos de 100 y 500 ms son valores programados en el firmware; la observación de telemetría no sustituye por sí sola una medición de tolerancia con instrumento.
 
 ## 6. UART: configuración y comandos
 
-| Parámetro | Configuración |
+| Parámetro | Valor |
 |---|---|
-| Periférico | **LPUART0**, conectado a MCU-Link VCOM |
+| Puerto / periférico | **LPUART0** por MCU-Link VCOM |
 | Velocidad | **115200 baudios** |
-| Bits de datos | **8** |
-| Paridad | **Ninguna** |
-| Bits de parada | **1** |
-| Control de flujo | **Ninguno** |
-| Recepción y transmisión | Interrupciones, con búferes circulares |
-| Terminador para comandos | **LF** o **CRLF** |
-| Terminador de respuestas | **CRLF** |
-| Puerto en Windows | El asignado al MCU-Link VCOM; durante las pruebas originales fue **COM3** |
+| Datos | **8 bits** |
+| Paridad | Ninguna |
+| Bits de parada | 1 |
+| Control de flujo | Sin control de flujo por hardware |
+| Recepción y transmisión | Interrupciones y buffers circulares |
+| Terminación de entrada | **LF** o **CRLF** |
+| Terminación de respuesta | **CRLF** |
+| Puerto observado en la práctica | **COM3** |
 
-### 6.1 Comandos admitidos
-
-| Comando | Respuesta esperada | Acción |
+| Comando | Respuesta | Comportamiento |
 |---|---|---|
-| `STATUS` | Una línea de telemetría | Muestra estado y mediciones |
-| `START` | `OK RUN` | Activa el monitoreo |
-| `STOP` | `OK PAUSE` | Suspende la alarma, sin detener la telemetría |
-| `THR 50` | `OK THR=50` | Establece umbral en 50 % |
-| `THR 95` | `OK THR=95` | Establece umbral en 95 % |
-| `THR 96` | `ERR` | Rechaza umbral fuera del intervalo 10–95 |
-| Otro comando desconocido | `ERR` | No modifica la configuración |
+| `STATUS` | `t=...;ADC=...;PCT=...;THR=...;MODE=...;ALARM=...` | Reporta el estado |
+| `THR 50` | `OK THR=50` | Cambia el umbral a 50 % |
+| `START` | `OK RUN` | Reanuda la alarma |
+| `STOP` | `OK PAUSE` | Apaga la alarma y mantiene telemetría |
+| `THR 96` | `ERR` | Rechaza un umbral inválido |
+| `THR 9`, `THR abc`, `THR 50 extra`, `HOLA` | `ERR` | Rechaza entradas no válidas |
 
-**Formato de telemetría:**
+El firmware acepta valores decimales de umbral entre **10 % y 95 %**. La telemetría se envía automáticamente cada **1000 ms** y los comandos se procesan sin bloquear el ciclo principal.
+
+## 7. Estados, histéresis y botón SW2
+
+El sistema inicia en **RUN** con `THR=70`. En **PAUSE**, la adquisición ADC y la telemetría continúan, pero el LED blanco se apaga.
+
+La lógica de histéresis es:
 
 ```text
-t=200;ADC=0;PCT=0;THR=70;MODE=RUN;ALARM=0
+Encendido: PCT >= THR
+Apagado:   PCT < (THR - 5)
+En la banda entre ambos límites: mantener el estado anterior.
 ```
 
-En cada línea se reportan milisegundos (`t`), lectura ADC, porcentaje, umbral, modo y estado de alarma. El sistema transmite una línea automáticamente cada **1000 ms**.
+Con `THR=50`, se comprobó la secuencia: **42 % apagado → 52 % encendido → 47 % encendido → 42 % apagado**.
 
-## 7. Funcionamiento de la alarma
+El pulsador SW2 alternó entre RUN y PAUSE. Al mantenerlo presionado durante aproximadamente dos segundos, el modo permaneció estable sin alternancias adicionales.
 
-El estado inicial previsto es **RUN**, con umbral **70 %** y LED de alarma apagado hasta disponer de una lectura válida.
-
-- **RUN:** procesa el ADC y permite la activación de la alarma.
-- **PAUSE:** mantiene la adquisición y telemetría, pero apaga la alarma.
-- **Histéresis:** se enciende al llegar a `PCT >= THR`; se apaga al bajar de `PCT < THR - 5`; dentro de esa banda conserva su estado anterior.
-- **SW2:** una pulsación estable de 30 ms alterna RUN/PAUSE; mantener el pulsador oprimido no genera pulsaciones adicionales.
-
-Ejemplo con umbral de 50 %: la alarma se enciende al alcanzar **50 %**; si está encendida y el porcentaje desciende a **47 %**, permanece encendida; se apaga al caer por debajo de **45 %**.
-
-## 8. Estructura del proyecto
+## 8. Estructura del código
 
 ```text
 thaliaparcial2micro/
 ├── CMakeLists.txt
 ├── prj.conf
+├── .gitignore
 ├── README.md
 ├── src/
-│   ├── lpadc_polling.c       # Aplicación principal
-│   ├── hardware_init.c       # Inicialización de hardware
-│   ├── pin_mux.c             # Configuración de pines
+│   ├── lpadc_polling.c       # main() y control de ADC, TIMER, UART y GPIO
+│   ├── alarm_core.h          # Conversión, comandos, estados e histéresis
+│   ├── hardware_init.c       # Inicio del hardware
+│   ├── pin_mux.c             # Configuración física de pines
 │   ├── app.h
 │   ├── pin_mux.h
-│   ├── alarm_core.h          # Estados, comandos, histéresis y SW2
-│   ├── adc_control.h        # Módulo auxiliar del desarrollo
-│   ├── led_control.h        # Módulo auxiliar del desarrollo
-│   ├── timer_control.h      # Módulo auxiliar del desarrollo
-│   ├── uart_control.h       # Módulo auxiliar del desarrollo
-│   └── periodic_tasks.h     # Módulo auxiliar del desarrollo
+│   ├── adc_control.h
+│   ├── led_control.h
+│   ├── timer_control.h
+│   ├── uart_control.h
+│   └── periodic_tasks.h
 └── evidencias/
-    └── RESULTADOS_P01_P10.md
+    ├── RESULTADOS_P01_P10.md
+    └── capturas/
+        ├── uart_monitor_20261108.png
+        ├── sw2_pausa_20261108.png
+        └── adc_recorrido_20261108.png
 ```
 
-**Alcance de la integración:** `lpadc_polling.c` contiene la implementación principal de los periféricos y utiliza `alarm_core.h` para la lógica. Los demás encabezados auxiliares fueron creados durante el desarrollo incremental, pero **no están integrados en la aplicación principal** en esta versión.
+**Archivos realmente integrados en CMake:** `src/lpadc_polling.c`, `src/hardware_init.c` y `src/pin_mux.c`, junto con los encabezados `app.h`, `pin_mux.h` y `alarm_core.h`. Los otros archivos `.h` documentan módulos auxiliares preparados durante el desarrollo; la aplicación principal utiliza su propia implementación de los periféricos.
 
-## 9. Instrucciones de compilación y ejecución
+## 9. Compilación, grabación y ejecución
 
-1. Instalar **Visual Studio Code**, la extensión **MCUXpresso for VS Code**, el **MCUXpresso SDK para FRDM-MCXA156**, **Arm GNU Toolchain** y **LinkServer**.
-2. Abrir en VS Code la carpeta raíz **`thaliaparcial2micro`** (donde se encuentra `CMakeLists.txt`), no solamente la carpeta `src`.
-3. Desde el panel **MCUXpresso**, importar **el proyecto CMake existente**, seleccionando el SDK para FRDM-MCXA156 y la herramienta Arm GNU. No es necesario importar un nuevo ejemplo.
-4. Verificar que `CMakeLists.txt` contenga las selecciones `set(board frdmmcxa156)` y `set(board_root examples/_boards)` y que incluya `src/lpadc_polling.c`.
-5. Seleccionar el proyecto **`analog_alarm`** y ejecutar **Build Project**. Revisar la salida de compilación; si hay errores, corregirlos antes de programar la placa.
-6. Con la alimentación desconectada, revisar las conexiones del potenciómetro y las resistencias de ambos LED. Conectar después el cable USB-C del equipo al conector **J21 (MCU-Link)** de la placa.
-7. En la extensión MCUXpresso, iniciar **Debug/Flash** para cargar el programa. Si la ejecución se detiene al entrar en `main`, pulsar **Continue/Resume**.
-8. Abrir el monitor serial y seleccionar el puerto **MCU-Link VCOM** correspondiente (puede ser COM3 u otro). Configurar **115200, 8N1** y enviar `STATUS` terminado en LF o CRLF.
-9. Girar el potenciómetro y observar los cambios en `ADC` y `PCT`. Verificar el parpadeo del LED rojo, el encendido/apagado del LED blanco, los comandos `THR`, `STOP`, `START` y el funcionamiento de SW2.
-10. Registrar capturas, resultados de pruebas y **hash del commit que realmente se compiló y grabó** para documentar la versión evaluada.
+1. Abrir la carpeta raíz `thaliaparcial2micro` en **Visual Studio Code** y abrir la extensión **MCUXpresso for VS Code**.
+2. Asociar el proyecto con el **MCUXpresso SDK 26.9.0** y la placa **FRDM-MCXA156**, utilizando **Arm GNU Toolchain 14.2.1**.
+3. Verificar en `CMakeLists.txt`: `set(board frdmmcxa156)`, `set(board_root examples/_boards)` y `src/lpadc_polling.c` dentro de `mcux_add_source`.
+4. En el panel **Projects**, seleccionar la configuración **Debug** y ejecutar **Build Project**.
+5. Conectar la placa por USB-C al puerto **MCU-Link J21**. Usar **Debug/Flash** para grabar el firmware. Si se detiene en `main()`, seleccionar **Continue/Resume**.
+6. Abrir el monitor serie en **COM3**, o en el puerto MCU-Link VCOM asignado por Windows, con **115200, 8N1**, terminación de comando **LF o CRLF**.
+7. Verificar telemetría, lectura del potenciómetro, LED rojo y blanco, `THR 50`, `STOP`, `START` y SW2.
 
-**Nota:** las líneas rojas de IntelliSense debajo de `#include` no demuestran por sí solas un error. El criterio para validar la compilación es el resultado real de **Build Project** con el SDK y toolchain configurados.
+**Resultado de la práctica:** se completaron la compilación, la ejecución física y las comprobaciones funcionales descritas. Los resultados corresponden al código de este repositorio. Los archivos generados en `debug/` no se incluyen en Git gracias a `.gitignore`.
 
-## 10. Evidencias y estado de verificación
+## 10. Resultados y evidencias
 
-En el proyecto original `examen2microthalia` se confirmó la compilación, carga y funcionamiento de ADC, LED, botón SW2 y comandos UART en la FRDM-MCXA156. El **6 de noviembre de 2026**, una prueba automatizada P10 identificó **150 respuestas de 150 comandos** y **30 intervalos de telemetría de 1000 ms**; la latencia máxima aproximada registrada desde Python/Windows fue de **16 ms**.
+El **8 de noviembre de 2026** se documentaron las pruebas funcionales del proyecto en la FRDM-MCXA156 con el monitor UART y observaciones en la placa. El detalle y las capturas están organizados en:
 
-Esos resultados **corresponden al firmware original** y **no certifican automáticamente** que `thaliaparcial2micro` compile o funcione en la placa. Este nuevo repositorio tiene **pendiente** la validación de Build, Flash y pruebas físicas. También faltan algunas mediciones instrumentales solicitadas en la rúbrica. Se detallan en [RESULTADOS_P01_P10.md](evidencias/RESULTADOS_P01_P10.md).
+**[Ver resultados y evidencias del proyecto](evidencias/RESULTADOS_P01_P10.md)**
 
-Los registros P10 originales están disponibles en el repositorio previamente probado:
+<details>
+<summary>Capturas de la práctica</summary>
 
-- [Registro de prueba P10 (TXT)](https://github.com/thaliaaminishapimentel/examen2microthalia/blob/main/evidencias/P10_log_20261106_210046.txt)
-- [Respuestas de los 150 comandos (CSV)](https://github.com/thaliaaminishapimentel/examen2microthalia/blob/main/evidencias/P10_respuestas_20261106_210046.csv)
+**Monitor UART y telemetría**
+
+![Monitor UART](evidencias/capturas/uart_monitor_20261108.png)
+
+**Modo PAUSE y pulsador SW2**
+
+![Prueba de SW2 y PAUSE](evidencias/capturas/sw2_pausa_20261108.png)
+
+**Recorrido ADC del potenciómetro**
+
+![Recorrido de ADC](evidencias/capturas/adc_recorrido_20261108.png)
+
+</details>
 
 ## 11. Referencias técnicas
 
-- [NXP — Manual de la placa FRDM-MCXA156, UM12121](https://www.nxp.com/docs/en/user-manual/UM12121.pdf)
-- [NXP — Guía de inicio FRDM-MCXA156](https://www.nxp.com/document/guide/getting-started-with-frdm-mcxa156:GS-FRDM-MCXA156)
-- [NXP — Referencia de API MCXA156 y reloj CTIMER](https://mcuxpresso.nxp.com/mcuxsdk/latest/api/devices/MCXA156/index.html)
-- [NXP — Driver LPADC y modos de resolución](https://mcuxpresso.nxp.com/api_doc/dev/4178/a00036.html)
-
----
-
-**Estado del proyecto al redactar este documento:** firmware organizado en el repositorio, **pendiente de compilación y validación física de esta versión**.
+- [NXP — Manual de usuario FRDM-MCXA156 (UM12121)](https://www.nxp.com/docs/en/user-manual/UM12121.pdf)
+- [NXP — Guía de inicio para FRDM-MCXA156](https://www.nxp.com/document/guide/getting-started-with-frdm-mcxa156:GS-FRDM-MCXA156)
+- [NXP — API de MCXA156](https://mcuxpresso.nxp.com/mcuxsdk/latest/api/devices/MCXA156/index.html)
